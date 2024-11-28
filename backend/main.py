@@ -1,4 +1,4 @@
-from fastapi import FastAPI, UploadFile, File, HTTPException, Depends, Query
+from fastapi import FastAPI, UploadFile, File, HTTPException, Depends, Query, APIRouter
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from typing import List, Optional
@@ -22,19 +22,16 @@ load_dotenv()
 
 app = FastAPI()
 
+# Create API router
+router = APIRouter()
+
 # Configure CORS
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[
-        "http://localhost:5173",
-        "http://localhost:5174",
-        "https://effortless-clafoutis-323a84.netlify.app",
-        "https://ai-voice-assistant-frontend.netlify.app",
-        "*"  # Be more restrictive in production
-    ],
+    allow_origins=["*"],  # Allows all origins
     allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_methods=["*"],  # Allows all methods
+    allow_headers=["*"],  # Allows all headers
 )
 
 # Set Google Cloud credentials if available
@@ -71,7 +68,7 @@ class PaginatedHistory(BaseModel):
     per_page: int
     total_pages: int
 
-@app.get("/api/history", response_model=PaginatedHistory)
+@router.get("/api/history", response_model=PaginatedHistory)
 async def get_history(
     page: int = Query(1, ge=1),
     per_page: int = Query(10, ge=1, le=100),
@@ -116,13 +113,13 @@ async def get_history(
         "total_pages": total_pages
     }
 
-@app.delete("/api/history/{item_id}")
+@router.delete("/api/history/{item_id}")
 async def delete_history_item(item_id: int):
     global history_items
     history_items = [item for item in history_items if item["id"] != item_id]
     return {"message": "Item deleted successfully"}
 
-@app.post("/api/transcribe")
+@router.post("/api/transcribe")
 async def transcribe_audio(request: TranscriptionRequest):
     try:
         # Check if Google Cloud credentials are available
@@ -178,7 +175,7 @@ async def transcribe_audio(request: TranscriptionRequest):
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
-@app.post("/api/chat")
+@router.post("/api/chat")
 async def chat_with_ai(request: ChatRequest):
     try:
         messages = [{"role": msg.role, "content": msg.content} for msg in request.messages]
@@ -203,7 +200,7 @@ async def chat_with_ai(request: ChatRequest):
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
-@app.post("/api/upload")
+@router.post("/api/upload")
 async def upload_file(file: UploadFile = File(...)):
     try:
         contents = await file.read()
@@ -255,6 +252,9 @@ async def upload_file(file: UploadFile = File(...)):
         }
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+# Include router in app
+app.include_router(router)
 
 if __name__ == "__main__":
     import uvicorn

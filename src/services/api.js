@@ -50,11 +50,11 @@ const handleApiError = async (error, retryCount = 0) => {
 
 // API endpoints
 const ENDPOINTS = {
-  UPLOAD: '/upload',
-  TRANSCRIBE: '/transcribe',
-  CHAT: '/chat',
-  HISTORY: '/history',
-  DELETE_HISTORY: (id) => `/history/${id}`
+  UPLOAD: '/api/upload',
+  TRANSCRIBE: '/api/transcribe',
+  CHAT: '/api/chat',
+  HISTORY: '/api/history',
+  DELETE_HISTORY: (id) => `/api/history/${id}`
 };
 
 export const transcribeAudio = async (audioData, retryCount = 0) => {
