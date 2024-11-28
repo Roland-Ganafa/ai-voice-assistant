@@ -48,6 +48,15 @@ const handleApiError = async (error, retryCount = 0) => {
   throw new Error(errorMessage);
 };
 
+// API endpoints
+const ENDPOINTS = {
+  UPLOAD: '/upload',
+  TRANSCRIBE: '/transcribe',
+  CHAT: '/chat',
+  HISTORY: '/history',
+  DELETE_HISTORY: (id) => `/history/${id}`
+};
+
 export const transcribeAudio = async (audioData, retryCount = 0) => {
   try {
     console.log('Sending audio data to server...');
@@ -63,7 +72,7 @@ export const transcribeAudio = async (audioData, retryCount = 0) => {
       cleanAudioData = audioData.split(',')[1];
     }
 
-    const response = await axios.post(`${API_BASE_URL}/transcribe`, {
+    const response = await axios.post(`${API_BASE_URL}${ENDPOINTS.TRANSCRIBE}`, {
       audio_data: cleanAudioData,
     }, {
       headers: {
@@ -87,7 +96,7 @@ export const transcribeAudio = async (audioData, retryCount = 0) => {
 
 export const chatWithAI = async (messages, retryCount = 0) => {
   try {
-    const response = await axios.post(`${API_BASE_URL}/chat`, {
+    const response = await axios.post(`${API_BASE_URL}${ENDPOINTS.CHAT}`, {
       messages: messages
     }, {
       headers: {
@@ -110,7 +119,7 @@ export const uploadDocument = async (file, retryCount = 0) => {
     const formData = new FormData();
     formData.append('file', file);
     
-    const response = await axios.post(`${API_BASE_URL}/upload`, formData, {
+    const response = await axios.post(`${API_BASE_URL}${ENDPOINTS.UPLOAD}`, formData, {
       headers: {
         'Content-Type': 'multipart/form-data',
       },
@@ -148,7 +157,7 @@ export const fetchHistory = async ({
       params.append('search', search);
     }
 
-    const response = await axios.get(`${API_BASE_URL}/api/history?${params.toString()}`, {
+    const response = await axios.get(`${API_BASE_URL}${ENDPOINTS.HISTORY}?${params.toString()}`, {
       timeout: 30000, // 30 second timeout
     });
     return response.data;
@@ -163,7 +172,7 @@ export const fetchHistory = async ({
 
 export const deleteHistoryItem = async (id, retryCount = 0) => {
   try {
-    await axios.delete(`${API_BASE_URL}/api/history/${id}`, {
+    await axios.delete(`${API_BASE_URL}${ENDPOINTS.DELETE_HISTORY(id)}`, {
       timeout: 30000, // 30 second timeout
     });
   } catch (error) {

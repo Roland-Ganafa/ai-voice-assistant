@@ -27,8 +27,10 @@ app.add_middleware(
     CORSMiddleware,
     allow_origins=[
         "http://localhost:5173",
+        "http://localhost:5174",
         "https://effortless-clafoutis-323a84.netlify.app",
-        "*"  # Temporarily allow all origins for testing
+        "https://ai-voice-assistant-frontend.netlify.app",
+        "*"  # Be more restrictive in production
     ],
     allow_credentials=True,
     allow_methods=["*"],
