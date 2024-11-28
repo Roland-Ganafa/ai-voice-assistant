@@ -25,6 +25,11 @@ app = FastAPI()
 # Create API router
 router = APIRouter()
 
+# Add root route for health check
+@app.get("/")
+async def root():
+    return {"status": "ok", "message": "AI Voice Assistant API is running"}
+
 # Configure CORS
 app.add_middleware(
     CORSMiddleware,
