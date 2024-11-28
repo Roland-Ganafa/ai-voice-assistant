@@ -127,8 +127,14 @@ async def transcribe_audio(request: TranscriptionRequest):
         if not google_creds:
             raise HTTPException(status_code=500, detail="Google Cloud credentials are not available")
 
-        # Decode base64 audio data
-        audio_bytes = base64.b64decode(request.audio_data.split(",")[1])
+        try:
+            # Decode base64 audio data
+            audio_data = request.audio_data
+            if "," in audio_data:
+                audio_data = audio_data.split(",")[1]
+            audio_bytes = base64.b64decode(audio_data)
+        except Exception as e:
+            raise HTTPException(status_code=400, detail="Invalid audio data format")
         
         # Configure audio and recognition settings
         audio = speech_v1.RecognitionAudio(content=audio_bytes)
@@ -137,17 +143,36 @@ async def transcribe_audio(request: TranscriptionRequest):
             sample_rate_hertz=48000,
             language_code="en-US",
             enable_automatic_punctuation=True,
+            use_enhanced=True,
+            model="latest_long",
         )
 
-        # Perform the transcription
-        response = speech_client.recognize(config=config, audio=audio)
-        
-        # Extract the transcribed text
-        transcript = ""
-        for result in response.results:
-            transcript += result.alternatives[0].transcript + " "
+        try:
+            # Perform the transcription
+            response = speech_client.recognize(config=config, audio=audio)
+            
+            # Extract the transcribed text
+            transcript = ""
+            for result in response.results:
+                transcript += result.alternatives[0].transcript + " "
 
-        return {"transcript": transcript.strip()}
+            if not transcript.strip():
+                raise HTTPException(status_code=400, detail="No speech detected in the audio")
+
+            # Store in history
+            history_items.append({
+                "id": len(history_items) + 1,
+                "type": "voice",
+                "content": transcript.strip(),
+                "timestamp": datetime.now().isoformat()
+            })
+
+            return {"transcript": transcript.strip()}
+        except Exception as e:
+            raise HTTPException(status_code=500, detail="Failed to transcribe audio: " + str(e))
+            
+    except HTTPException as he:
+        raise he
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 

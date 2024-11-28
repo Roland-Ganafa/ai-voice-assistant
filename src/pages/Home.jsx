@@ -2,6 +2,7 @@ import { useState, useRef, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { MicrophoneIcon, StopIcon } from '@heroicons/react/solid';
 import { transcribeAudio, chatWithAI } from '../services/api';
+import { toast } from 'react-hot-toast';
 
 function Home() {
   const [isListening, setIsListening] = useState(false);
@@ -20,55 +21,144 @@ function Home() {
 
   const startRecording = async () => {
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      mediaRecorder.current = new MediaRecorder(stream);
+      console.log('Starting recording...');
+      const stream = await navigator.mediaDevices.getUserMedia({ 
+        audio: {
+          echoCancellation: true,
+          noiseSuppression: true,
+          sampleRate: 48000,
+          channelCount: 1
+        } 
+      });
+      console.log('Got media stream:', stream.getAudioTracks()[0].getSettings());
+
+      // Create and configure MediaRecorder
+      const options = { mimeType: 'audio/webm;codecs=opus' };
+      if (!MediaRecorder.isTypeSupported(options.mimeType)) {
+        console.error('Audio format not supported');
+        toast.error('This browser does not support the required audio format');
+        return;
+      }
+      
+      mediaRecorder.current = new MediaRecorder(stream, options);
+      console.log('MediaRecorder created with state:', mediaRecorder.current.state);
       audioChunks.current = [];
 
       mediaRecorder.current.ondataavailable = (event) => {
-        audioChunks.current.push(event.data);
+        console.log('Data available event:', event.data.size, 'bytes');
+        if (event.data.size > 0) {
+          audioChunks.current.push(event.data);
+        }
       };
 
       mediaRecorder.current.onstop = async () => {
-        const audioBlob = new Blob(audioChunks.current, { type: 'audio/webm' });
-        const reader = new FileReader();
-        
-        reader.onloadend = async () => {
-          try {
-            setIsLoading(true);
-            const base64Audio = reader.result;
-            const { transcript } = await transcribeAudio(base64Audio);
-            
-            // Add user message
-            const userMessage = { role: 'user', content: transcript };
-            setMessages(prev => [...prev, userMessage]);
-            
-            // Get AI response
-            const { response } = await chatWithAI([...messages, userMessage]);
-            
-            // Add AI response
-            setMessages(prev => [...prev, { role: 'assistant', content: response }]);
-          } catch (error) {
-            console.error('Error processing audio:', error);
-          } finally {
-            setIsLoading(false);
+        console.log('Recording stopped. Processing', audioChunks.current.length, 'chunks');
+        try {
+          if (audioChunks.current.length === 0) {
+            console.error('No audio chunks recorded');
+            toast.error('No audio data recorded');
+            return;
           }
-        };
 
-        reader.readAsDataURL(audioBlob);
+          const audioBlob = new Blob(audioChunks.current, { 
+            type: 'audio/webm;codecs=opus'
+          });
+          console.log('Created audio blob:', audioBlob.size, 'bytes');
+          
+          if (audioBlob.size === 0) {
+            console.error('Audio blob is empty');
+            toast.error('No audio data captured');
+            return;
+          }
+
+          // Debug: Play the audio back
+          const audioUrl = URL.createObjectURL(audioBlob);
+          const audio = new Audio(audioUrl);
+          console.log('Created audio URL:', audioUrl);
+          
+          const reader = new FileReader();
+          console.log('Reading audio blob...');
+          
+          reader.onloadend = async () => {
+            console.log('Audio blob read complete');
+            try {
+              setIsLoading(true);
+              const base64Audio = reader.result;
+              console.log('Base64 audio length:', base64Audio.length);
+              
+              const { transcript } = await transcribeAudio(base64Audio);
+              console.log('Received transcript:', transcript);
+              
+              if (!transcript) {
+                console.error('No transcript received');
+                toast.error('Could not transcribe audio. Please try speaking more clearly.');
+                return;
+              }
+
+              // Add user message
+              const userMessage = { role: 'user', content: transcript };
+              setMessages(prev => [...prev, userMessage]);
+              toast.success('Audio transcribed successfully');
+              
+              // Get AI response
+              const { response } = await chatWithAI([...messages, userMessage]);
+              console.log('Received AI response:', response);
+              
+              // Add AI response
+              setMessages(prev => [...prev, { role: 'assistant', content: response }]);
+            } catch (error) {
+              console.error('Error processing audio:', error);
+              toast.error(error.message || 'Error processing audio. Please try again.');
+            } finally {
+              setIsLoading(false);
+            }
+          };
+
+          reader.onerror = (error) => {
+            console.error('Error reading audio blob:', error);
+            toast.error('Error reading audio data');
+            setIsLoading(false);
+          };
+
+          reader.readAsDataURL(audioBlob);
+        } catch (error) {
+          console.error('Error processing recording:', error);
+          toast.error('Error processing recording. Please try again.');
+          setIsLoading(false);
+        }
       };
 
-      mediaRecorder.current.start();
+      mediaRecorder.current.onerror = (event) => {
+        console.error('MediaRecorder error:', event.error);
+        toast.error('Recording error: ' + event.error.message);
+      };
+
+      mediaRecorder.current.start(1000); // Record in 1-second chunks
+      console.log('Recording started');
       setIsListening(true);
+      toast.success('Recording started');
     } catch (error) {
       console.error('Error starting recording:', error);
+      if (error.name === 'NotAllowedError') {
+        toast.error('Microphone permission denied. Please allow microphone access.');
+      } else {
+        toast.error('Could not start recording. Please check your microphone.');
+      }
     }
   };
 
   const stopRecording = () => {
+    console.log('Stopping recording...');
     if (mediaRecorder.current && mediaRecorder.current.state !== 'inactive') {
       mediaRecorder.current.stop();
-      mediaRecorder.current.stream.getTracks().forEach(track => track.stop());
+      mediaRecorder.current.stream.getTracks().forEach(track => {
+        track.stop();
+        console.log('Track stopped:', track.label);
+      });
       setIsListening(false);
+      toast.success('Recording stopped');
+    } else {
+      console.log('MediaRecorder state:', mediaRecorder.current?.state);
     }
   };
 
@@ -106,10 +196,8 @@ function Home() {
               : isLoading
                 ? 'bg-gray-400'
                 : 'bg-primary hover:bg-primary-dark'
-            } text-white shadow-lg
-            before:content-[''] before:absolute before:inset-0 
-            before:rounded-full before:bg-primary before:opacity-20 
-            before:animate-ping`}
+            } text-white shadow-lg transition-colors
+            ${!isLoading && !isListening ? 'hover:bg-opacity-90' : ''}`}
         >
           {isListening ? (
             <StopIcon className="w-12 h-12" />
@@ -119,15 +207,25 @@ function Home() {
         </button>
       </motion.div>
 
+      {/* Status Message */}
+      <motion.p
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        className="text-lg text-gray-600 dark:text-gray-300 mb-6"
+      >
+        {isListening 
+          ? 'Listening... Click the button to stop' 
+          : isLoading 
+            ? 'Processing your message...' 
+            : 'Click the microphone button to start speaking'}
+      </motion.p>
+
       {/* Chat Display */}
       <motion.div
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
         className="w-full max-w-2xl bg-white dark:bg-gray-800 rounded-lg shadow-lg p-6"
       >
-        <h2 className="text-xl font-semibold text-gray-800 dark:text-white mb-4">
-          {isListening ? 'Listening...' : isLoading ? 'Processing...' : 'Click the microphone to start'}
-        </h2>
         <div 
           ref={scrollRef}
           className="h-96 overflow-y-auto bg-gray-50 dark:bg-gray-700 rounded p-4 space-y-4"
@@ -150,15 +248,9 @@ function Home() {
               </div>
             </div>
           ))}
-          {isLoading && (
-            <div className="flex justify-start">
-              <div className="bg-gray-200 dark:bg-gray-600 rounded-lg p-3">
-                <div className="flex space-x-2">
-                  <div className="w-2 h-2 bg-gray-500 rounded-full animate-bounce" />
-                  <div className="w-2 h-2 bg-gray-500 rounded-full animate-bounce delay-100" />
-                  <div className="w-2 h-2 bg-gray-500 rounded-full animate-bounce delay-200" />
-                </div>
-              </div>
+          {messages.length === 0 && (
+            <div className="text-center text-gray-500 dark:text-gray-400">
+              Your conversation will appear here
             </div>
           )}
         </div>
